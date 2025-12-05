@@ -26,19 +26,19 @@ class OllamaLLM:
         return self.__client
 
     @classmethod
-    def connect_to_ollama_cloud(cls, ollama_api_key: str | None = None, model: str = 'gpt-oss:20b-cloud') -> Self:
+    def connect_to_ollama_cloud(cls, ollama_api_key: str | None = None, model: str = 'gpt-oss:20b-cloud', instruction: str = BASE_INSTRUCTION, track_chat_history: bool = False) -> Self:
         key_to_use = ollama_api_key or os.getenv("OLLAMA_API_KEY")
         if not key_to_use:
             raise ValueError("'OLLAMA_API_KEY' environment variable not found")
         client = Client(
             host='https://ollama.com',
             headers={'Authorization': 'Bearer '+key_to_use})
-        return cls(client, model)
+        return cls(client, model, instruction, track_chat_history)
 
     @classmethod
-    def connect_to_local_ollama(cls, host: str) -> Self:
+    def connect_to_local_ollama(cls, host: str, model: str, instruction: str = BASE_INSTRUCTION, track_chat_history: bool = False) -> Self:
         client = Client(host=host)
-        return cls(client)
+        return cls(client, model, instruction, track_chat_history)
 
     def structured_output_recover(self, prompt: str, schema: BaseModel, **chat_kwargs) -> BaseModel:
         messages = [
