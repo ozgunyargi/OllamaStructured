@@ -16,8 +16,7 @@ reviews while automatically recovering from malformed outputs.
 ## Prerequisites
 - Python&nbsp;3.12 or later (as defined in `pyproject.toml`)
 - The [uv](https://github.com/astral-sh/uv) Python packaging tool
-- An Ollama Cloud API key with access to the `gpt-oss:20b-cloud` model (or any
-  other model you plan to target)
+- An Ollama Cloud API key.
 
 ## Environment configuration
 1. Create a `.env` file in the repository root and add the credentials the code
@@ -74,7 +73,3 @@ structured data.
 - Schema validation errors after retries usually mean the model produced output
   that cannot be coerced into your Pydantic model. Tighten the schema or
   simplify the prompt.
-
-## License
-This repository is provided as-is without an explicit license. Add one if you
-plan to redistribute or deploy the code.
