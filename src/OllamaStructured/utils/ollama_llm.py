@@ -5,7 +5,7 @@ from typing import Self
 from ollama import Client, ChatResponse
 from pydantic import BaseModel
 from json.decoder import JSONDecodeError
-from src.utils.prompts import BASE_INSTRUCTION, STRUCTURED_OUTPUT_INSTRUCTION, RECOVER_OUTPUT_INSTRUCTION
+from .prompts import BASE_INSTRUCTION, STRUCTURED_OUTPUT_INSTRUCTION, RECOVER_OUTPUT_INSTRUCTION
 
 class OllamaLLM:
 

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from pprint import pprint
 from typing import Optional, List
 
-from src.utils.ollama_llm import OllamaLLM
+from OllamaStructured import OllamaLLM
 
 class ProductReview(BaseModel):
     product_name: str = Field(..., description="Name of the product being reviewed")
