@@ -38,7 +38,7 @@ Rating: 4 out of 5 stars
 Verified Purchase: Yes
 """
 
-SAMPLE_IMAGE = Path('/Users/ozgunyargi/Documents/SU/PHD Application/Profile_Photo.jpg')
+SAMPLE_IMAGE = Path('SAMPLE_IMAGE_PATH_HERE')
 
 def text_sample():
     llm = OllamaLLM.connect_to_ollama_cloud()
