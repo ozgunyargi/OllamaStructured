@@ -1,7 +1,8 @@
 import os, json
+from pathlib import Path
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
-from typing import Self
+from typing import Self, Annotated
 from ollama import Client, ChatResponse
 from pydantic import BaseModel
 from json.decoder import JSONDecodeError
@@ -61,12 +62,15 @@ class OllamaLLM:
         return schema(**content)
         
 
-    def _ask(self, prompt: str, **chat_kwargs) -> ChatResponse:
-        self.__messages.append(
-            {
+    def _ask(self, prompt: str, img: Annotated[str, 'Path of the image'] | bytes | None = None, **chat_kwargs) -> ChatResponse:
+        _message = {
                 'role': 'user',
                 'content': prompt
             }
+        if img:
+            _message['images'] = [img]
+        self.__messages.append(
+            _message
         )
         response = self.client.chat(
             model=self.model,
@@ -84,8 +88,8 @@ class OllamaLLM:
             self.__messages.pop()
         return response
 
-    def ask(self, prompt: str, **chat_kwargs) -> str:
-        return self._ask(prompt, **chat_kwargs).message.content
+    def ask(self, prompt: str, img: Annotated[str, 'Path of the image'] | bytes | None = None, **chat_kwargs) -> str:
+        return self._ask(prompt, img, **chat_kwargs).message.content
 
     @retry(
         sleep=1,
@@ -93,9 +97,9 @@ class OllamaLLM:
         retry=retry_if_exception_type(JSONDecodeError),
         before_sleep= lambda x: self.structured_output_recover(prompt, schema, **chat_kwargs)
     )
-    def ask_w_structured_output(self, prompt: str, schema: BaseModel, **chat_kwargs) -> BaseModel:
+    def ask_w_structured_output(self, prompt: str, schema: BaseModel, img: Annotated[str, 'Path of the image']| bytes | None = None, **chat_kwargs) -> BaseModel:
         structured_output_instruction = self.__instruction + "\n" + STRUCTURED_OUTPUT_INSTRUCTION.replace("<PYDANTIC_SCHEMA>", json.dumps(schema.model_json_schema()))
         self.__messages[0]['content'] = structured_output_instruction
-        resp = self._ask(prompt, **chat_kwargs).message.content
+        resp = self._ask(prompt, img, **chat_kwargs).message.content
         resp = json.loads(resp)
         return schema(**resp)
