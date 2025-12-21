@@ -86,7 +86,6 @@ class OllamaLLM:
                                                      .replace("<EXCEPTION>", exception_message)
             }
         ]
-        print(messages[-2])
         self.__last_response = self.client.chat(
             model=self.model,
             messages=self.__messages,
