@@ -41,9 +41,12 @@ Schema:
 """
 
 RECOVER_OUTPUT_INSTRUCTION = """
-ALERT: Your previous response did NOT conform to the required Pydantic schema.
+ALERT: Your previous response did NOT conform to the required Pydantic schema or could not get parsed as it a python dictionary.
 
-Schema Validation Failed. You must now:
+Schema Validation Failed Due:
+<EXCEPTION>
+
+You must now:
 
 1. ACKNOWLEDGE THE ERROR
    - Your previous output was invalid JSON, incomplete, or did not match the schema

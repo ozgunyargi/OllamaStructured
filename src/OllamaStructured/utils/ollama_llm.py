@@ -1,12 +1,17 @@
+from tenacity.retry import retry_if_exception_type
+from os import stat
 import os, json
 from pathlib import Path
-from tenacity import retry, stop_after_attempt, retry_if_exception_type
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+from copy import deepcopy
 
 from typing import Self, Annotated
 from ollama import Client, ChatResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from json.decoder import JSONDecodeError
+
 from .prompts import BASE_INSTRUCTION, STRUCTURED_OUTPUT_INSTRUCTION, RECOVER_OUTPUT_INSTRUCTION
+from .exceptions import OllamaLLMStructuredOutputException
 
 class OllamaLLM:
 
@@ -21,6 +26,11 @@ class OllamaLLM:
             }
         ]
         self.__track_chat_history = track_chat_history
+        self.__last_response = None
+        self.__recover_exceptions = {
+            JSONDecodeError: "Unable to create a valid python dictionary from the response since 'json.loads()' has been failed due 'JSONDecodeError' exception.",
+            ValidationError: "Unable to validate response dict due 'pydantic.ValidationError' exception."
+        }
 
     @property
     def client(self) -> Client:
@@ -41,34 +51,53 @@ class OllamaLLM:
         client = Client(host=host)
         return cls(client, model, instruction, track_chat_history)
 
-    def structured_output_recover(self, prompt: str, schema: BaseModel, **chat_kwargs) -> BaseModel:
-        messages = [
-            {
-                'role': 'system',
-                'content': RECOVER_OUTPUT_INSTRUCTION.replace("<PYDANTIC_SCHEMA>", json.dumps(schema.model_json_schema()))
-            },
-            {
-                'role': 'user',
-                'content': prompt
-            }
-        ]
-        response = self.client.chat(
-            model=self.model,
-            messages=messages,
-            **chat_kwargs
-        )
-        content = response.message.content
-        content = json.loads(content)
-        return schema(**content)
-        
-
-    def _ask(self, prompt: str, img: Annotated[str, 'Path of the image'] | bytes | None = None, **chat_kwargs) -> ChatResponse:
+    @staticmethod
+    def __prepare_user_message(prompt: str, img: Annotated[str, 'Path of the image'] | bytes | None = None) -> dict:
         _message = {
                 'role': 'user',
                 'content': prompt
             }
         if img:
             _message['images'] = [img]
+        return _message
+
+    @retry(
+        stop = stop_after_attempt(3),
+        reraise=True,
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry = retry_if_exception_type((
+            JSONDecodeError,
+            ValidationError
+        )),
+        retry_error_cls=OllamaLLMStructuredOutputException
+    )
+    def __structured_output_recover(self, prompt: str, schema: BaseModel, exception_message: str, img: Annotated[str, 'Path of the image'] | bytes | None = None, **chat_kwargs) -> BaseModel:
+        print('Retrying...')
+        messages = deepcopy(self.__messages)
+        messages += [
+            self.__prepare_user_message(prompt, img),
+            {
+                'role': 'assistant',
+                'content': self.__last_response
+            },
+            {
+                'role': 'user',
+                'content': RECOVER_OUTPUT_INSTRUCTION.replace("<PYDANTIC_SCHEMA>", json.dumps(schema.model_json_schema()))\
+                                                     .replace("<EXCEPTION>", exception_message)
+            }
+        ]
+        print(messages[-2])
+        self.__last_response = self.client.chat(
+            model=self.model,
+            messages=self.__messages,
+            **chat_kwargs
+        ).message.content
+        resp = json.loads(self.__last_response)
+        return schema(**resp)
+        
+
+    def _ask(self, prompt: str, img: Annotated[str, 'Path of the image'] | bytes | None = None, **chat_kwargs) -> ChatResponse:
+        _message = self.__prepare_user_message(prompt, img)
         self.__messages.append(
             _message
         )
@@ -91,15 +120,12 @@ class OllamaLLM:
     def ask(self, prompt: str, img: Annotated[str, 'Path of the image'] | bytes | None = None, **chat_kwargs) -> str:
         return self._ask(prompt, img, **chat_kwargs).message.content
 
-    @retry(
-        sleep=1,
-        stop=stop_after_attempt(3),
-        retry=retry_if_exception_type(JSONDecodeError),
-        before_sleep= lambda x: self.structured_output_recover(prompt, schema, **chat_kwargs)
-    )
     def ask_w_structured_output(self, prompt: str, schema: BaseModel, img: Annotated[str, 'Path of the image']| bytes | None = None, **chat_kwargs) -> BaseModel:
         structured_output_instruction = self.__instruction + "\n" + STRUCTURED_OUTPUT_INSTRUCTION.replace("<PYDANTIC_SCHEMA>", json.dumps(schema.model_json_schema()))
         self.__messages[0]['content'] = structured_output_instruction
-        resp = self._ask(prompt, img, **chat_kwargs).message.content
-        resp = json.loads(resp)
-        return schema(**resp)
+        self.__last_response = self._ask(prompt, img, **chat_kwargs).message.content
+        try:
+            resp = json.loads(self.__last_response)
+            return schema(**resp)
+        except (JSONDecodeError, ValidationError) as e:
+            return self.__structured_output_recover(prompt, schema, self.__recover_exceptions[type(e)], img, **chat_kwargs)
